@@ -11,6 +11,39 @@ from .tof_sim import sample_point_from_hist_parallel, make_tof_config
 from .dataloader import patch_info_from_rect_data
 
 
+def _scale_rectangles_for_resize(fr: np.ndarray, orig_h: int, orig_w: int, image_size: int) -> np.ndarray:
+    scale_y = image_size / max(orig_h, 1)
+    scale_x = image_size / max(orig_w, 1)
+    fr_before = fr.astype(np.float32, copy=True)
+    fr_scaled = fr_before.copy()
+    fr_scaled[:, 0] *= scale_y
+    fr_scaled[:, 2] *= scale_y
+    fr_scaled[:, 1] *= scale_x
+    fr_scaled[:, 3] *= scale_x
+
+    # Validate that normalized rectangle ranges stay consistent before/after resize.
+    before_norm = np.stack(
+        [
+            fr_before[:, 0] / max(orig_h, 1),
+            fr_before[:, 2] / max(orig_h, 1),
+            fr_before[:, 1] / max(orig_w, 1),
+            fr_before[:, 3] / max(orig_w, 1),
+        ],
+        axis=1,
+    )
+    after_norm = np.stack(
+        [
+            fr_scaled[:, 0] / max(image_size, 1),
+            fr_scaled[:, 2] / max(image_size, 1),
+            fr_scaled[:, 1] / max(image_size, 1),
+            fr_scaled[:, 3] / max(image_size, 1),
+        ],
+        axis=1,
+    )
+    assert np.allclose(after_norm, before_norm, atol=1e-5), "Rectangle ranges are inconsistent after resize"
+    return fr_scaled
+
+
 class ZJUL5Dataset(Dataset):
     def __init__(
         self,
@@ -80,15 +113,10 @@ class ZJUL5Dataset(Dataset):
         depth = torch.from_numpy(depth).unsqueeze(0).float()
 
         if self.image_size is not None:
+            orig_h, orig_w = rgb.shape[1], rgb.shape[2]
             rgb = F.interpolate(rgb.unsqueeze(0), size=(self.image_size, self.image_size), mode="bilinear", align_corners=False).squeeze(0)
             depth = F.interpolate(depth.unsqueeze(0), size=(self.image_size, self.image_size), mode="bilinear", align_corners=False).squeeze(0)
-            scale_y = self.image_size / max(rgb.shape[1], 1)
-            scale_x = self.image_size / max(rgb.shape[2], 1)
-            fr = fr.astype(np.float32)
-            fr[:, 0] *= scale_y
-            fr[:, 2] *= scale_y
-            fr[:, 1] *= scale_x
-            fr[:, 3] *= scale_x
+            fr = _scale_rectangles_for_resize(fr, orig_h, orig_w, self.image_size)
 
         if self.normalize_rgb:
             rgb = (rgb - self.rgb_mean) / self.rgb_std

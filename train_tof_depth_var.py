@@ -284,14 +284,19 @@ def train(args):
 
     if args.vis_every and args.vis_every > 0:
         os.makedirs(args.vis_dir, exist_ok=True)
+    resume_global_step = None
     if args.resume:
         model, optimizer, start_epoch = load_checkpoint(model, fpath=args.resume, optimizer=optimizer)
+        resume_ckpt = torch.load(args.resume, map_location="cpu")
+        if isinstance(resume_ckpt, dict) and "global_step" in resume_ckpt:
+            resume_global_step = int(resume_ckpt["global_step"])
     else:
         start_epoch = 0
-    global_step = start_epoch + args.epochs
+    global_step = resume_global_step if resume_global_step is not None else start_epoch * len(train_dl)
 
     total_steps = args.epochs * len(train_dl)
     start_time = time.time()
+    run_start_step = global_step
 
     model.train()
     for ep in range(start_epoch, args.epochs):
@@ -317,9 +322,9 @@ def train(args):
 
             if args.log_every > 0 and (global_step % args.log_every == 0):
                 elapsed = time.time() - start_time
-                steps_done = max(global_step + 1, 1)
+                steps_done = max(global_step - run_start_step + 1, 1)
                 step_time = elapsed / steps_done
-                remain = max(total_steps - steps_done, 0)
+                remain = max(total_steps - (global_step + 1), 0)
                 eta_min = (remain * step_time) / 60.0
                 print(f"\n[train] step={global_step} loss={loss.item():.4f} avg_step={step_time:.3f}s ETA={eta_min:.1f}m")
 
@@ -352,20 +357,18 @@ def train(args):
         if test_dl is not None and (ep + 1) % args.eval_every == 0:
             avg, metrics = evaluate(model, test_dl, args, seg_offsets, seg_lens, device, tag=f"{eval_dataset}:{args.eval_split}")
             if args.logging:  
-                tag=f"{eval_dataset}:{args.eval_split}"  
-                wandb.log({f"{tag}_loss": avg, **{f"{tag}_{k}": v for k, v in metrics.items()}})
-                unwrap_model = model.module if hasattr(model, "module") else model
-                save_checkpoint(unwrap_model, optimizer, ep, fpath=f"checkpoints/{run_id}_latest.pt")
-                save_weights(unwrap_model, fpath=f"weights/{run_id}_latest.pt")
+                tag=f"{args.dataset_eval}:{args.eval_split}"  
+                wandb.log({f"{tag}_loss": avg, **{f"{tag}_{k}": v for k, v in metrics.items()}}, step=global_step)
+                save_checkpoint(model, optimizer, ep, fpath=f"checkpoints/{run_id}_latest.pt", global_step=global_step)
+                save_weights(model.module, fpath=f"weights/{run_id}_latest.pt")
                 if metrics['rmse'] < best_loss:
-                    save_checkpoint(unwrap_model, optimizer, ep, fpath=f"checkpoints/{run_id}_best.pt")
-                    save_weights(unwrap_model, fpath=f"weights/{run_id}_best.pt")
+                    save_checkpoint(model, optimizer, ep, fpath=f"checkpoints/{run_id}_best.pt", global_step=global_step)
+                    save_weights(model.module, fpath=f"weights/{run_id}_best.pt")
                     best_loss = metrics['rmse']
         model.train()
         if args.save_every > 0 and (ep + 1) % args.save_every == 0:
-            unwrap_model = model.module if hasattr(model, "module") else model
-            save_checkpoint(unwrap_model, optimizer, ep + 1, fpath=f"checkpoints/{run_id}_ep{ep+1:03d}.pt")
-            save_weights(unwrap_model, fpath=f"weights/{run_id}_ep{ep+1:03d}.pt")
+            save_checkpoint(model, optimizer, ep + 1, fpath=f"checkpoints/{run_id}_ep{ep+1:03d}.pt", global_step=global_step)
+            save_weights(model.module, fpath=f"weights/{run_id}_ep{ep+1:03d}.pt")
         
 
     if args.zju_data_root and args.zju_json_file:

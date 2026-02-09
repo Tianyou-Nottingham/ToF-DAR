@@ -83,7 +83,7 @@ class VectorQuantizer2(nn.Module):
                 h_BChw = F.interpolate(self.embedding(idx_Bhw).permute(0, 3, 1, 2), size=(H, W), mode='bicubic').contiguous() if (si != SN-1) else self.embedding(idx_Bhw).permute(0, 3, 1, 2).contiguous()
                 h_BChw = self.quant_resi[si/(SN-1)](h_BChw)
                 f_hat = f_hat + h_BChw
-                f_rest -= h_BChw
+                f_rest = f_rest - h_BChw
                 
                 if self.training and dist.initialized():
                     handler.wait()
@@ -91,13 +91,14 @@ class VectorQuantizer2(nn.Module):
                     elif self.record_hit < 100: self.ema_vocab_hit_SV[si].mul_(0.9).add_(hit_V.mul(0.1))
                     else: self.ema_vocab_hit_SV[si].mul_(0.99).add_(hit_V.mul(0.01))
                     self.record_hit += 1
-                vocab_hit_V.add_(hit_V)
-                mean_vq_loss += F.mse_loss(f_hat.data, f_BChw).mul_(self.beta) + F.mse_loss(f_hat, f_no_grad)
+                vocab_hit_V = vocab_hit_V + hit_V
+                mean_vq_loss = mean_vq_loss + F.mse_loss(f_hat.data, f_BChw).mul(self.beta) + F.mse_loss(f_hat, f_no_grad)
             
-            mean_vq_loss *= 1. / SN
-            f_hat = (f_hat.data - f_no_grad).add_(f_BChw)
+            mean_vq_loss = mean_vq_loss * (1. / SN)
+            f_hat = (f_hat - f_no_grad).detach() + f_BChw
         
-        margin = tdist.get_world_size() * (f_BChw.numel() / f_BChw.shape[1]) / self.vocab_size * 0.08
+        world_size = tdist.get_world_size() if tdist.is_initialized() else 1
+        margin = world_size * (f_BChw.numel() / f_BChw.shape[1]) / self.vocab_size * 0.08
         # margin = pn*pn / 100
         if ret_usages: usages = [(self.ema_vocab_hit_SV[si] >= margin).float().mean().item() * 100 for si, pn in enumerate(self.v_patch_nums)]
         else: usages = None

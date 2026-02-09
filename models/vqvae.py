@@ -16,6 +16,7 @@ from .quant import VectorQuantizer2
 class VQVAE(nn.Module):
     def __init__(
         self, vocab_size=4096, z_channels=32, ch=128, dropout=0.0,
+        in_channels=3,
         beta=0.25,              # commitment loss weight
         using_znorm=False,      # whether to normalize when computing the nearest neighbors
         quant_conv_ks=3,        # quant conv kernel size
@@ -31,7 +32,7 @@ class VQVAE(nn.Module):
         # ddconfig is copied from https://github.com/CompVis/latent-diffusion/blob/e66308c7f2e64cb581c6d27ab6fbeb846828253b/models/first_stage_models/vq-f16/config.yaml
         ddconfig = dict(
             dropout=dropout, ch=ch, z_channels=z_channels,
-            in_channels=3, ch_mult=(1, 1, 2, 2, 4), num_res_blocks=2,   # from vq-f16/config.yaml above
+            in_channels=in_channels, ch_mult=(1, 1, 2, 2, 4), num_res_blocks=2,   # from vq-f16/config.yaml above
             using_sa=True, using_mid_sa=True,                           # from vq-f16/config.yaml above
             # resamp_with_conv=True,   # always True, removed.
         )

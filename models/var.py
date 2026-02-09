@@ -122,6 +122,20 @@ class VAR(nn.Module):
         else:                               # fused_add_norm is not used
             h = h_or_h_and_residual
         return self.head(self.head_nm(h.float(), cond_BD).float()).float()
+
+    def _build_first_tokens(
+        self,
+        B: int,
+        cond_BD: torch.Tensor,
+        init_h_BChw: Optional[torch.Tensor],
+    ) -> torch.Tensor:
+        if init_h_BChw is None:
+            sos = cond_BD.unsqueeze(1).expand(B, self.first_l, -1)
+            return sos + self.pos_start.expand(B, self.first_l, -1)
+        pn0 = self.patch_nums[0]
+        assert init_h_BChw.shape[-2:] == (pn0, pn0), f'init_h_BChw must be ({pn0}, {pn0}) but got {init_h_BChw.shape[-2:]}'
+        init_tokens = init_h_BChw.view(B, self.Cvae, -1).transpose(1, 2)
+        return self.word_embed(init_tokens) + self.pos_start.expand(B, self.first_l, -1)
     
     @torch.no_grad()
     def autoregressive_infer_cfg(
@@ -188,22 +202,91 @@ class VAR(nn.Module):
         
         for b in self.blocks: b.attn.kv_caching(False)
         return self.vae_proxy[0].fhat_to_img(f_hat).add_(1).mul_(0.5)   # de-normalize, from [-1, 1] to [0, 1]
+
+    @torch.no_grad()
+    def autoregressive_infer_with_prior(
+        self,
+        init_h_BChw: torch.Tensor,
+        cond_BD: torch.Tensor,
+        g_seed: Optional[int] = None,
+        top_k=0,
+        top_p=0.0,
+        more_smooth=False,
+    ) -> torch.Tensor:
+        """
+        Autoregressive inference with a provided prior at the first scale.
+        :param init_h_BChw: (B, Cvae, pn0, pn0) prior tokens at the first scale
+        :param cond_BD: (B, D) conditional embedding
+        :return: reconstructed image (B, 3, H, W) in [-1, 1]
+        """
+        B = init_h_BChw.shape[0]
+        if g_seed is None: rng = None
+        else: self.rng.manual_seed(g_seed); rng = self.rng
+
+        pn0 = self.patch_nums[0]
+        assert init_h_BChw.shape[-2:] == (pn0, pn0), f'init_h_BChw must be ({pn0}, {pn0}) but got {init_h_BChw.shape[-2:]}'
+
+        lvl_pos = self.lvl_embed(self.lvl_1L) + self.pos_1LC
+        f_hat = init_h_BChw.new_zeros(B, self.Cvae, self.patch_nums[-1], self.patch_nums[-1])
+
+        # seed with provided prior (skip sampling at stage 0)
+        f_hat, next_token_map = self.vae_quant_proxy[0].get_next_autoregressive_input(0, len(self.patch_nums), f_hat, init_h_BChw)
+        if self.num_stages_minus_1 > 0:
+            next_token_map = next_token_map.view(B, self.Cvae, -1).transpose(1, 2)
+            next_token_map = self.word_embed(next_token_map) + lvl_pos[:, self.begin_ends[1][0]:self.begin_ends[1][1]]
+
+        for b in self.blocks: b.attn.kv_caching(True)
+        cur_L = self.patch_nums[0] * self.patch_nums[0]
+        for si in range(1, len(self.patch_nums)):
+            pn = self.patch_nums[si]
+            cur_L += pn * pn
+            cond_BD_or_gss = self.shared_ada_lin(cond_BD)
+            x = next_token_map
+            AdaLNSelfAttn.forward
+            for b in self.blocks:
+                x = b(x=x, cond_BD=cond_BD_or_gss, attn_bias=None)
+            logits_BlV = self.get_logits(x, cond_BD)
+            idx_Bl = sample_with_top_k_top_p_(logits_BlV, rng=rng, top_k=top_k, top_p=top_p, num_samples=1)[:, :, 0]
+            if not more_smooth:
+                h_BChw = self.vae_quant_proxy[0].embedding(idx_Bl)
+            else:
+                ratio = si / max(self.num_stages_minus_1, 1)
+                gum_t = max(0.27 * (1 - ratio * 0.95), 0.005)
+                h_BChw = gumbel_softmax_with_rng(logits_BlV.mul(1 + ratio), tau=gum_t, hard=False, dim=-1, rng=rng) @ self.vae_quant_proxy[0].embedding.weight.unsqueeze(0)
+
+            h_BChw = h_BChw.transpose_(1, 2).reshape(B, self.Cvae, pn, pn)
+            f_hat, next_token_map = self.vae_quant_proxy[0].get_next_autoregressive_input(si, len(self.patch_nums), f_hat, h_BChw)
+            if si != self.num_stages_minus_1:
+                next_token_map = next_token_map.view(B, self.Cvae, -1).transpose(1, 2)
+                next_token_map = self.word_embed(next_token_map) + lvl_pos[:, cur_L:cur_L + self.patch_nums[si+1] ** 2]
+
+        for b in self.blocks: b.attn.kv_caching(False)
+        return self.vae_proxy[0].fhat_to_img(f_hat)
     
-    def forward(self, label_B: torch.LongTensor, x_BLCv_wo_first_l: torch.Tensor) -> torch.Tensor:  # returns logits_BLV
+    def forward(
+        self,
+        label_B: Optional[torch.LongTensor],
+        x_BLCv_wo_first_l: torch.Tensor,
+        cond_BD: Optional[torch.Tensor] = None,
+        init_h_BChw: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:  # returns logits_BLV
         """
         :param label_B: label_B
         :param x_BLCv_wo_first_l: teacher forcing input (B, self.L-self.first_l, self.Cvae)
+        :param cond_BD: optional conditional embedding (B, D)
+        :param init_h_BChw: optional prior tokens at the first scale (B, Cvae, pn0, pn0)
         :return: logits BLV, V is vocab_size
         """
         bg, ed = self.begin_ends[self.prog_si] if self.prog_si >= 0 else (0, self.L)
         B = x_BLCv_wo_first_l.shape[0]
         with torch.cuda.amp.autocast(enabled=False):
-            label_B = torch.where(torch.rand(B, device=label_B.device) < self.cond_drop_rate, self.num_classes, label_B)
-            sos = cond_BD = self.class_emb(label_B)
-            sos = sos.unsqueeze(1).expand(B, self.first_l, -1) + self.pos_start.expand(B, self.first_l, -1)
-            
-            if self.prog_si == 0: x_BLC = sos
-            else: x_BLC = torch.cat((sos, self.word_embed(x_BLCv_wo_first_l.float())), dim=1)
+            if cond_BD is None:
+                label_B = torch.where(torch.rand(B, device=label_B.device) < self.cond_drop_rate, self.num_classes, label_B)
+                cond_BD = self.class_emb(label_B)
+
+            first_tokens = self._build_first_tokens(B, cond_BD, init_h_BChw)
+            if self.prog_si == 0: x_BLC = first_tokens
+            else: x_BLC = torch.cat((first_tokens, self.word_embed(x_BLCv_wo_first_l.float())), dim=1)
             x_BLC += self.lvl_embed(self.lvl_1L[:, :ed].expand(B, -1)) + self.pos_1LC[:, :ed] # lvl: BLC;  pos: 1LC
         
         attn_bias = self.attn_bias_for_masking[:, :, :ed, :ed]

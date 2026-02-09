@@ -1,0 +1,245 @@
+_wandb:
+    value:
+        cli_version: 0.24.2
+        e:
+            idgwicv58sqs0kbebrmokvtcltfoa07r:
+                args:
+                    - --local-rank=0
+                    - --dataset
+                    - nyu
+                    - --data_root
+                    - ./data/nyu_sync
+                    - --json_file
+                    - ./train_test_split/nyu_sync.json
+                    - --dataset_eval
+                    - nyu
+                    - --data_root_eval
+                    - ./data/nyu_depth_v2/official_splits/test
+                    - --json_file_eval
+                    - ./train_test_split/nyu_sync.json
+                    - --epochs
+                    - "20"
+                    - --eval_every
+                    - "1"
+                    - --eval_split
+                    - test
+                    - --split
+                    - train
+                    - --image_size
+                    - "256"
+                    - --depth_min
+                    - "0.0"
+                    - --depth_max
+                    - "10.0"
+                    - --batch_size
+                    - "16"
+                    - --lr
+                    - "0.00001"
+                    - --device
+                    - cuda
+                    - --input_height
+                    - "416"
+                    - --input_width
+                    - "544"
+                    - --train_zone_num
+                    - "8"
+                    - --zone_sample_num
+                    - "16"
+                    - --simu_max_distance
+                    - "4.0"
+                    - --drop_hist
+                    - "0.0"
+                    - --noise_mean
+                    - "0.0"
+                    - --noise_sigma
+                    - "0.0"
+                    - --noise_prob
+                    - "0.0"
+                    - --vae_ckpt
+                    - vae_ch160v4096z32.pth
+                    - --vis_every
+                    - "0"
+                    - --vis_dir
+                    - ""
+                    - --zju_data_root
+                    - ./data/ZJUL5
+                    - --zju_json_file
+                    - ./data/ZJUL5/data.json
+                    - --zju_eval_split
+                    - test
+                codePath: train_tof_depth_var.py
+                codePathLocal: train_tof_depth_var.py
+                cpu_count: 96
+                cpu_count_logical: 96
+                cudaVersion: "12.6"
+                disk:
+                    /:
+                        total: "405678407680"
+                        used: "6815559680"
+                email: tianyou.zhang@nottingham.ac.uk
+                executable: /gpfs01/home/ezxtz6/miniconda3/envs/mapanything/bin/python3
+                gpu: NVIDIA A100 80GB PCIe
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Ampere
+                      cudaCores: 6912
+                      memoryTotal: "85899345920"
+                      name: NVIDIA A100 80GB PCIe
+                      uuid: GPU-b6311ef5-1a15-e72e-66c2-fd9ff3e58875
+                host: ampere003.int.ada.nottingham.ac.uk
+                memory:
+                    total: "811356815360"
+                os: Linux-4.18.0-477.27.1.el8_8.x86_64-x86_64-with-glibc2.28
+                program: /gpfs01/home/ezxtz6/Code/ToF-DAR/train_tof_depth_var.py
+                python: CPython 3.12.12
+                root: /gpfs01/home/ezxtz6/Code/ToF-DAR
+                slurm:
+                    cluster_name: nottingham-ada
+                    conf: /opt/slurm/23.02.6/etc/slurm.conf
+                    cpus_on_node: "8"
+                    gpus_on_node: "1"
+                    gtids: "0"
+                    job_account: uon-free
+                    job_cpus_per_node: "8"
+                    job_end_time: "1770828790"
+                    job_gid: "60200513"
+                    job_gpus: "1"
+                    job_id: "6026965"
+                    job_name: ToF_DAR_train_largeBS
+                    job_nodelist: ampere003
+                    job_num_nodes: "1"
+                    job_partition: ampereq
+                    job_qos: free
+                    job_start_time: "1770655990"
+                    job_uid: "80131557"
+                    job_user: ezxtz6
+                    jobid: "6026965"
+                    localid: "0"
+                    mem_per_node: "32768"
+                    nnodes: "1"
+                    node_aliases: (null)
+                    nodeid: "0"
+                    nodelist: ampere003
+                    nprocs: "8"
+                    ntasks: "8"
+                    ntasks_per_node: "8"
+                    prio_process: "0"
+                    procid: "0"
+                    submit_dir: /gpfs01/home/ezxtz6/Code/ToF-DAR
+                    submit_host: hpclogin02.int.ada.nottingham.ac.uk
+                    task_pid: "2570803"
+                    tasks_per_node: "8"
+                    topology_addr: ibsw4.ibsw5.ampere003
+                    topology_addr_pattern: switch.switch.node
+                    working_cluster: nottingham-ada:hpcwlm01:6821:9984:109
+                startedAt: "2026-02-09T16:53:25.459814Z"
+                writerId: idgwicv58sqs0kbebrmokvtcltfoa07r
+        m: []
+        python_version: 3.12.12
+        t:
+            "1":
+                - 1
+                - 41
+                - 49
+                - 105
+            "2":
+                - 1
+                - 41
+                - 49
+                - 105
+            "3":
+                - 13
+                - 16
+                - 61
+            "4": 3.12.12
+            "5": 0.24.2
+            "12": 0.24.2
+            "13": linux-x86_64
+batch_size:
+    value: 16
+best_metric:
+    value: rmse
+ckpt_dir:
+    value: checkpoints
+data_root:
+    value: ./data/nyu_sync
+data_root_eval:
+    value: ./data/nyu_depth_v2/official_splits/test
+dataset:
+    value: nyu
+dataset_eval:
+    value: nyu
+depth_max:
+    value: 10
+depth_min:
+    value: 0
+device:
+    value: cuda
+drop_hist:
+    value: 0
+epochs:
+    value: 20
+eval_every:
+    value: 1
+eval_split:
+    value: test
+image_size:
+    value: 256
+input_height:
+    value: 416
+input_width:
+    value: 544
+json_file:
+    value: ./train_test_split/nyu_sync.json
+json_file_eval:
+    value: ./train_test_split/nyu_sync.json
+local_rank:
+    value: 0
+log_every:
+    value: 100
+logging:
+    value: true
+lr:
+    value: 1e-05
+noise_mean:
+    value: 0
+noise_prob:
+    value: 0
+noise_sigma:
+    value: 0
+num_workers:
+    value: 4
+resume:
+    value: null
+sample_uniform:
+    value: false
+save_best:
+    value: false
+save_every:
+    value: 5
+simu_max_distance:
+    value: 4
+split:
+    value: train
+train_zone_num:
+    value: 8
+train_zone_random_offset:
+    value: 0
+vae_ckpt:
+    value: vae_ch160v4096z32.pth
+var_ckpt:
+    value: null
+vis_dir:
+    value: ""
+vis_every:
+    value: 0
+weight_decay:
+    value: 0.1
+zju_data_root:
+    value: ./data/ZJUL5
+zju_eval_split:
+    value: test
+zju_json_file:
+    value: ./data/ZJUL5/data.json
+zone_sample_num:
+    value: 16

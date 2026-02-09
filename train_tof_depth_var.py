@@ -27,7 +27,13 @@ def build_args():
     p = argparse.ArgumentParser()
     p.add_argument("--local-rank", type=int, default=0)
     p.add_argument("--dataset", type=str, default="nyu", choices=["zjul5", "nyu"])
-    p.add_argument("--dataset_eval", type=str, default=None, choices=[None, "zjul5", "nyu"])
+    p.add_argument(
+        "--dataset_eval",
+        type=str,
+        default=None,
+        choices=[None, "zjul5", "nyu"],
+        help="evaluation dataset; defaults to --dataset when not set",
+    )
     p.add_argument("--data_root", type=str, required=True)
     p.add_argument("--json_file", type=str, required=True)
     p.add_argument("--data_root_eval", type=str, default=None)
@@ -101,14 +107,16 @@ def build_dataset(args, split, dataset):
             noise_sigma=args.noise_sigma if split == args.split else 0.0,
             noise_prob=args.noise_prob if split == args.split else 0.0,
         )
-    return ZJUL5Dataset(
-        data_root=args.data_root if split == "train" else args.data_root_eval ,
-        json_file=args.json_file if split == "train" else args.json_file_eval,
-        split=split,
-        image_size=args.image_size,
-        depth_min=args.depth_min,
-        depth_max=args.depth_max,
-    )
+    if dataset == "zjul5":
+        return ZJUL5Dataset(
+            data_root=args.data_root if split == "train" else args.data_root_eval ,
+            json_file=args.json_file if split == "train" else args.json_file_eval,
+            split=split,
+            image_size=args.image_size,
+            depth_min=args.depth_min,
+            depth_max=args.depth_max,
+        )
+    raise ValueError(f"Unknown dataset: {dataset}. Expected one of ['nyu', 'zjul5']")
 
 
 def build_model(args, device):
@@ -256,7 +264,8 @@ def train(args):
     train_ds = build_dataset(args, args.split, args.dataset)
     train_dl = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)
 
-    test_ds = build_dataset(args, args.eval_split, args.dataset_eval)
+    eval_dataset = args.dataset_eval or args.dataset
+    test_ds = build_dataset(args, args.eval_split, eval_dataset)
     test_dl = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=args.num_workers, pin_memory=True)
 
     load_vae(model, args)
@@ -341,9 +350,9 @@ def train(args):
         )
 
         if test_dl is not None and (ep + 1) % args.eval_every == 0:
-            avg, metrics = evaluate(model, test_dl, args, seg_offsets, seg_lens, device, tag=f"{args.dataset_eval}:{args.eval_split}")
+            avg, metrics = evaluate(model, test_dl, args, seg_offsets, seg_lens, device, tag=f"{eval_dataset}:{args.eval_split}")
             if args.logging:  
-                tag=f"{args.dataset_eval}:{args.eval_split}"  
+                tag=f"{eval_dataset}:{args.eval_split}"  
                 wandb.log({f"{tag}_loss": avg, **{f"{tag}_{k}": v for k, v in metrics.items()}})
                 unwrap_model = model.module if hasattr(model, "module") else model
                 save_checkpoint(unwrap_model, optimizer, ep, fpath=f"checkpoints/{run_id}_latest.pt")

@@ -345,16 +345,18 @@ def train(args):
             if args.logging:  
                 tag=f"{args.dataset_eval}:{args.eval_split}"  
                 wandb.log({f"{tag}_loss": avg, **{f"{tag}_{k}": v for k, v in metrics.items()}})
-                save_checkpoint(model, optimizer, ep, fpath=f"checkpoints/{run_id}_latest.pt")
-                save_weights(model.module, fpath=f"weights/{run_id}_latest.pt")
+                unwrap_model = model.module if hasattr(model, "module") else model
+                save_checkpoint(unwrap_model, optimizer, ep, fpath=f"checkpoints/{run_id}_latest.pt")
+                save_weights(unwrap_model, fpath=f"weights/{run_id}_latest.pt")
                 if metrics['rmse'] < best_loss:
-                    save_checkpoint(model, optimizer, ep, fpath=f"checkpoints/{run_id}_best.pt")
-                    save_weights(model.module, fpath=f"weights/{run_id}_best.pt")
+                    save_checkpoint(unwrap_model, optimizer, ep, fpath=f"checkpoints/{run_id}_best.pt")
+                    save_weights(unwrap_model, fpath=f"weights/{run_id}_best.pt")
                     best_loss = metrics['rmse']
         model.train()
         if args.save_every > 0 and (ep + 1) % args.save_every == 0:
-            save_checkpoint(model, optimizer, ep + 1, fpath=f"checkpoints/{run_id}_ep{ep+1:03d}.pt")
-            save_weights(model.module, fpath=f"weights/{run_id}_ep{ep+1:03d}.pt")
+            unwrap_model = model.module if hasattr(model, "module") else model
+            save_checkpoint(unwrap_model, optimizer, ep + 1, fpath=f"checkpoints/{run_id}_ep{ep+1:03d}.pt")
+            save_weights(unwrap_model, fpath=f"weights/{run_id}_ep{ep+1:03d}.pt")
         
 
     if args.zju_data_root and args.zju_json_file:

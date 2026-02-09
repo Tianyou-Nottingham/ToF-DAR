@@ -2,12 +2,16 @@ import os
 import torch
 
 
+def get_state_dict_model(model):
+    return model.module if hasattr(model, "module") else model
+
+
 def save_weights(model, fpath):
     folder = os.path.dirname(fpath)
     if not os.path.isdir(folder):
         os.makedirs(folder)
 
-    torch.save(model.state_dict(), fpath)
+    torch.save(get_state_dict_model(model).state_dict(), fpath)
     return
 
 

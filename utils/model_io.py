@@ -17,18 +17,20 @@ def load_weights(model, fpath):
     return model
 
 
-def save_checkpoint(model, optimizer, epoch, fpath):
+def save_checkpoint(model, optimizer, epoch, fpath, global_step=None):
     folder = os.path.dirname(fpath)
     if not os.path.isdir(folder):
         os.makedirs(folder)
 
-    torch.save(
-        {
-            "model": model.state_dict(),
-            "optimizer": optimizer.state_dict(),
-            "epoch": epoch
-        }
-        , fpath)
+    payload = {
+        "model": model.state_dict(),
+        "optimizer": optimizer.state_dict(),
+        "epoch": epoch,
+    }
+    if global_step is not None:
+        payload["global_step"] = int(global_step)
+
+    torch.save(payload, fpath)
 
 
 def load_checkpoint(model, fpath, optimizer=None):
